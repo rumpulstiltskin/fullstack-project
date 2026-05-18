@@ -1,18 +1,44 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { getBoard, putBoard } from "@/lib/api";
+import type { BoardData } from "@/lib/kanban";
 
-const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
+vi.mock("@/lib/api");
+
+const mockBoard: BoardData = {
+  columns: [
+    { id: "col-backlog", title: "Backlog", cardIds: [] },
+    { id: "col-discovery", title: "Discovery", cardIds: [] },
+    { id: "col-progress", title: "In Progress", cardIds: [] },
+    { id: "col-review", title: "Review", cardIds: [] },
+    { id: "col-done", title: "Done", cardIds: [] },
+  ],
+  cards: {},
+};
+
+const mockLogout = vi.fn();
+
+beforeEach(() => {
+  vi.mocked(getBoard).mockResolvedValue(mockBoard);
+  vi.mocked(putBoard).mockResolvedValue(undefined);
+});
+
+const getFirstColumn = async () => {
+  const columns = await screen.findAllByTestId(/column-/i);
+  return columns[0];
+};
 
 describe("KanbanBoard", () => {
-  it("renders five columns", () => {
-    render(<KanbanBoard />);
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+  it("renders five columns", async () => {
+    render(<KanbanBoard onLogout={mockLogout} />);
+    const columns = await screen.findAllByTestId(/column-/i);
+    expect(columns).toHaveLength(5);
   });
 
   it("renames a column", async () => {
-    render(<KanbanBoard />);
-    const column = getFirstColumn();
+    render(<KanbanBoard onLogout={mockLogout} />);
+    const column = await getFirstColumn();
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "New Name");
@@ -20,8 +46,8 @@ describe("KanbanBoard", () => {
   });
 
   it("adds and removes a card", async () => {
-    render(<KanbanBoard />);
-    const column = getFirstColumn();
+    render(<KanbanBoard onLogout={mockLogout} />);
+    const column = await getFirstColumn();
     const addButton = within(column).getByRole("button", {
       name: /add a card/i,
     });
