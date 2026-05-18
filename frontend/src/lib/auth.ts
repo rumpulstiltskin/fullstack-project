@@ -27,3 +27,7 @@ export async function logout(): Promise<void> {
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}

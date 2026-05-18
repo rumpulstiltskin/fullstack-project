@@ -12,7 +12,7 @@ router = APIRouter()
 _USER_ID = "user-1"
 
 
-def _load_board(db: sqlite3.Connection) -> BoardData:
+def load_board(db: sqlite3.Connection) -> BoardData:
     board = db.execute(
         "SELECT id FROM boards WHERE user_id = ?", (_USER_ID,)
     ).fetchone()
@@ -57,7 +57,7 @@ def get_board(
     token: str = Depends(get_token),
     db: sqlite3.Connection = Depends(get_db),
 ) -> BoardData:
-    return _load_board(db)
+    return load_board(db)
 
 
 @router.put("/api/board")
@@ -99,4 +99,4 @@ def put_board(
                 )
 
     db.commit()
-    return _load_board(db)
+    return load_board(db)

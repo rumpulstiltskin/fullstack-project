@@ -23,7 +23,7 @@ test("adds a card to a column", async ({ page }) => {
   await firstColumn.getByPlaceholder("Card title").fill("Playwright card");
   await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
   await firstColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(firstColumn.getByText("Playwright card")).toBeVisible();
+  await expect(firstColumn.getByText("Playwright card").first()).toBeVisible();
 });
 
 test("added card persists after refresh", async ({ page }) => {
@@ -36,13 +36,13 @@ test("added card persists after refresh", async ({ page }) => {
     (res) => res.url().includes("/api/board") && res.request().method() === "PUT"
   );
   await firstColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(firstColumn.getByText("Persistent card")).toBeVisible();
+  await expect(firstColumn.getByText("Persistent card").first()).toBeVisible();
   await putPromise;
 
   await page.reload();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
   await expect(
-    page.locator('[data-testid^="column-"]').first().getByText("Persistent card")
+    page.locator('[data-testid^="column-"]').first().getByText("Persistent card").first()
   ).toBeVisible();
 });
 
@@ -54,7 +54,7 @@ test("moves a card between columns", async ({ page }) => {
   await backlogColumn.getByPlaceholder("Card title").fill("Card to drag");
   await backlogColumn.getByPlaceholder("Details").fill("Will be dragged.");
   await backlogColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(backlogColumn.getByText("Card to drag")).toBeVisible();
+  await expect(backlogColumn.getByText("Card to drag").first()).toBeVisible();
 
   const cardLocator = backlogColumn.locator('[data-testid^="card-"]').last();
   const cardBox = await cardLocator.boundingBox();
@@ -74,7 +74,7 @@ test("moves a card between columns", async ({ page }) => {
     { steps: 12 }
   );
   await page.mouse.up();
-  await expect(reviewColumn.getByText("Card to drag")).toBeVisible();
+  await expect(reviewColumn.getByText("Card to drag").first()).toBeVisible();
 });
 
 test("dragged card position persists after refresh", async ({ page }) => {
@@ -88,7 +88,7 @@ test("dragged card position persists after refresh", async ({ page }) => {
   await backlogColumn.getByPlaceholder("Card title").fill("Drag persist card");
   await backlogColumn.getByPlaceholder("Details").fill("Drag test.");
   await backlogColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(backlogColumn.getByText("Drag persist card")).toBeVisible();
+  await expect(backlogColumn.getByText("Drag persist card").first()).toBeVisible();
   await addPutPromise;
 
   const cardLocator = backlogColumn.locator('[data-testid^="card-"]').last();
@@ -112,12 +112,31 @@ test("dragged card position persists after refresh", async ({ page }) => {
     { steps: 12 }
   );
   await page.mouse.up();
-  await expect(reviewColumn.getByText("Drag persist card")).toBeVisible();
+  await expect(reviewColumn.getByText("Drag persist card").first()).toBeVisible();
   await dragPutPromise;
 
   await page.reload();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
   await expect(
-    page.getByTestId("column-col-review").getByText("Drag persist card")
+    page.getByTestId("column-col-review").getByText("Drag persist card").first()
   ).toBeVisible();
+});
+
+test("AI sidebar adds a card to the board without page reload", async ({ page }) => {
+  await page.getByRole("button", { name: /^ai$/i }).click();
+  await expect(page.getByPlaceholder(/ask the ai/i)).toBeVisible();
+
+  const chatPromise = page.waitForResponse(
+    (res) => res.url().includes("/api/chat") && res.request().method() === "POST",
+    { timeout: 60000 }
+  );
+  await page.getByPlaceholder(/ask the ai/i).fill(
+    "Add a card called Test Card to the Backlog column"
+  );
+  await page.getByRole("button", { name: /^send$/i }).click();
+  await chatPromise;
+
+  await expect(
+    page.getByTestId("column-col-backlog").getByText("Test Card").first()
+  ).toBeVisible({ timeout: 15000 });
 });

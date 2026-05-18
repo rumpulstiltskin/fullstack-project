@@ -16,6 +16,7 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, moveCard, type BoardData } from "@/lib/kanban";
 import { logout } from "@/lib/auth";
 import { getBoard, putBoard } from "@/lib/api";
+import { AISidebar } from "@/components/AISidebar";
 
 type KanbanBoardProps = {
   onLogout: () => void;
@@ -26,6 +27,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const boardRef = useRef<BoardData | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -36,7 +38,11 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         boardRef.current = data;
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch((err: Error) => {
+        if (err.message === "401") {
+          onLogout();
+          return;
+        }
         setError("Failed to load board.");
         setIsLoading(false);
       });
@@ -131,6 +137,12 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     save(newBoard);
   };
 
+  const handleBoardUpdate = (newBoard: BoardData) => {
+    boardRef.current = newBoard;
+    setBoard(newBoard);
+    save(newBoard);
+  };
+
   const handleLogout = async () => {
     await logout();
     onLogout();
@@ -174,13 +186,26 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
                 and capture quick notes without getting buried in settings.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:border-[var(--navy-dark)] hover:text-[var(--navy-dark)]"
-            >
-              Sign out
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen((o) => !o)}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                  isSidebarOpen
+                    ? "border-[var(--primary-blue)] text-[var(--primary-blue)]"
+                    : "border-[var(--stroke)] text-[var(--gray-text)] hover:border-[var(--navy-dark)] hover:text-[var(--navy-dark)]"
+                }`}
+              >
+                AI
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:border-[var(--navy-dark)] hover:text-[var(--navy-dark)]"
+              >
+                Sign out
+              </button>
+            </div>
             <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
                 Focus
@@ -230,6 +255,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
           </DragOverlay>
         </DndContext>
       </main>
+      <AISidebar isOpen={isSidebarOpen} onBoardUpdate={handleBoardUpdate} />
     </div>
   );
 };

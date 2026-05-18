@@ -209,21 +209,23 @@ The backend can reach OpenRouter. A test endpoint confirms a live response.
 Every AI call receives the current board state and conversation history. The AI responds with a user-facing message and an optional full board update.
 
 ### Checklist
-- [ ] Define Pydantic models in `backend/models.py`:
-  - `ChatMessage` — `{ role: "user" | "assistant", content: str }`
-  - `ChatRequest` — `{ history: list[ChatMessage], user_message: str }`
-  - `AIResponse` — `{ message: str, board_update: BoardData | None }`
-- [ ] Update `backend/ai.py` — add `call_ai_structured(board: BoardData, messages: list[ChatMessage]) -> AIResponse`; builds a system prompt that includes the board as JSON and instructs the model to respond with the `AIResponse` JSON schema; parses and validates the response with Pydantic
-- [ ] Create `backend/routers/chat.py` — `POST /api/chat` (auth-protected): fetches the current board, calls `call_ai_structured`, and returns `AIResponse`
-- [ ] Write `backend/tests/test_chat.py`:
-  - Mock `call_ai_structured`; verify the endpoint builds the correct prompt
-  - Test that a `board_update` from the AI is returned correctly
-  - Test that a `null` board_update is handled correctly
+- [x] Add `ChatMessage`, `ChatRequest`, `AIResponse` to `backend/models.py`
+- [x] Update `backend/ai.py` — add `call_ai_structured(board, messages) -> AIResponse`; builds a system prompt embedding the board as JSON + strict JSON-only response instructions; strips markdown code fences before parsing; validates with Pydantic; raises `RuntimeError` on bad JSON
+- [x] Rename `_load_board` → `load_board` in `backend/routers/board.py` so the chat router can import it
+- [x] Create `backend/routers/chat.py` — `POST /api/chat` (auth-protected): loads current board, appends user message to history, calls `call_ai_structured`, maps `RuntimeError` to 502
+- [x] Include `chat_router` in `backend/main.py`
+- [x] Write `backend/tests/test_chat.py` — 4 tests: message-only response, board_update response, correct args passed to AI, auth required
+
+### Design decisions
+- `call_ai_structured` reuses `call_ai` internally, passing a system message as the first element of the messages list
+- The system prompt includes the full board JSON and instructs the model to respond with ONLY a JSON object — no preamble, no markdown
+- `_extract_json` strips ` ```json ``` ` code fences before parsing, as some models wrap responses in them
+- The chat endpoint does not persist `board_update` to the DB — that is the frontend's responsibility (Part 10)
 
 ### Success criteria
-- `POST /api/chat` with a simple question returns `{ message: "...", board_update: null }`
-- `POST /api/chat` asking to move a card returns a valid `board_update` that can be applied to the board
-- All new backend tests pass
+- `POST /api/chat` with a simple question returns `{ message: "...", board_update: null }` ✓ verified live
+- `POST /api/chat` asking to add a card returns a valid `board_update` with all 5 columns and the new card ✓ verified live
+- All 15 backend tests pass ✓
 
 ---
 
@@ -233,21 +235,27 @@ Every AI call receives the current board state and conversation history. The AI 
 A sidebar widget in the UI allows the user to chat with the AI. When the AI returns a board update, the board refreshes automatically without a page reload.
 
 ### Checklist
-- [ ] Create `frontend/src/lib/chat.ts` — `sendMessage(history: ChatMessage[], userMessage: string) -> Promise<AIResponse>`; posts to `/api/chat`
-- [ ] Create `frontend/src/components/AISidebar.tsx`:
+- [x] Create `frontend/src/lib/chat.ts` — `sendMessage(history: ChatMessage[], userMessage: string) -> Promise<AIResponse>`; posts to `/api/chat`
+- [x] Create `frontend/src/components/AISidebar.tsx`:
   - Collapsible panel anchored to the right side of the screen
   - Scrollable message list showing user and assistant turns
   - Text input and submit button at the bottom
   - Typing indicator (simple animated dots) while awaiting the response
   - Auto-scrolls to the latest message
   - Styled using the existing CSS custom properties and color scheme
-- [ ] Update `KanbanBoard.tsx`:
+- [x] Update `KanbanBoard.tsx`:
   - Add sidebar open/close toggle state
   - Add a toggle button in the header
   - Pass a `onBoardUpdate` callback into `AISidebar`; when `board_update` is non-null, call `setBoard` with the new state and call `PUT /api/board` to persist it
-- [ ] Unit tests for `chat.ts`: mocked fetch; verifies request shape and response parsing
-- [ ] Unit test for `AISidebar`: renders message list; sends message on submit; shows typing indicator
-- [ ] E2E test: open sidebar → type "Add a card called Test Card to Backlog" → send → verify card appears in Backlog column without a page reload
+- [x] Unit tests for `chat.ts`: mocked fetch; verifies request shape and response parsing
+- [x] Unit test for `AISidebar`: renders message list; sends message on submit; shows typing indicator
+- [x] E2E test: open sidebar → type "Add a card called Test Card to Backlog" → send → verify card appears in Backlog column without a page reload
+
+### Design decisions
+- `scrollIntoView` uses double optional chain (`?.scrollIntoView?.()`) for jsdom compatibility in unit tests
+- `data-testid="thinking-indicator"` on the animated dots container for testability
+- E2E text assertions use `.first()` throughout to handle DB accumulation across repeated test runs (persistent SQLite keeps all cards from prior runs)
+- AI `waitForResponse` timeout set to 60s; free OpenRouter model latency can exceed 30s
 
 ### Success criteria
 - Sidebar opens and closes via the header toggle

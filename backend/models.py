@@ -16,3 +16,18 @@ class Column(BaseModel):
 class BoardData(BaseModel):
     columns: list[Column]
     cards: dict[str, Card]
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    history: list[ChatMessage]
+    user_message: str
+
+
+class AIResponse(BaseModel):
+    message: str
+    board_update: BoardData | None = None

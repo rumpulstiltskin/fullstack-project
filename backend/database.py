@@ -38,6 +38,17 @@ _SEED_COLUMNS = [
     ("col-done", "Done"),
 ]
 
+_SEED_CARDS = [
+    ("card-1", "col-backlog", "Align roadmap themes", "Draft quarterly themes with impact statements and metrics.", 0),
+    ("card-2", "col-backlog", "Gather customer signals", "Review support tags, sales notes, and churn feedback.", 1),
+    ("card-3", "col-discovery", "Prototype analytics view", "Sketch initial dashboard layout and key drill-downs.", 0),
+    ("card-4", "col-progress", "Refine status language", "Standardize column labels and tone across the board.", 0),
+    ("card-5", "col-progress", "Design card layout", "Add hierarchy and spacing for scanning dense lists.", 1),
+    ("card-6", "col-review", "QA micro-interactions", "Verify hover, focus, and loading states.", 0),
+    ("card-7", "col-done", "Ship marketing page", "Final copy approved and asset pack delivered.", 0),
+    ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally.", 1),
+]
+
 
 def _open(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
@@ -65,6 +76,11 @@ def seed(conn: sqlite3.Connection) -> None:
         conn.execute(
             "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
             (col_id, "board-1", title, i),
+        )
+    for card_id, col_id, title, details, position in _SEED_CARDS:
+        conn.execute(
+            "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
+            (card_id, col_id, title, details, position),
         )
     conn.commit()
 

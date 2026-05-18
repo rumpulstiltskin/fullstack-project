@@ -1,4 +1,4 @@
-import { getToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
 import type { BoardData } from "@/lib/kanban";
 
 function authHeaders(): HeadersInit {
@@ -9,9 +9,17 @@ function authHeaders(): HeadersInit {
   };
 }
 
+function checkStatus(res: Response): void {
+  if (res.status === 401) {
+    clearToken();
+    throw new Error("401");
+  }
+  if (!res.ok) throw new Error(String(res.status));
+}
+
 export async function getBoard(): Promise<BoardData> {
   const res = await fetch("/api/board", { headers: authHeaders() });
-  if (!res.ok) throw new Error(`Failed to load board: ${res.status}`);
+  checkStatus(res);
   return res.json();
 }
 
@@ -21,5 +29,5 @@ export async function putBoard(board: BoardData): Promise<void> {
     headers: authHeaders(),
     body: JSON.stringify(board),
   });
-  if (!res.ok) throw new Error(`Failed to save board: ${res.status}`);
+  checkStatus(res);
 }
