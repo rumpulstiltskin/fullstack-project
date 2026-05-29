@@ -31,7 +31,7 @@ export const AISidebar = ({ isOpen, onBoardUpdate }: AISidebarProps) => {
     setIsThinking(true);
 
     try {
-      const response: AIResponse = await sendMessage(history, message);
+      const response: AIResponse = await sendMessage(message);
       setHistory([...nextHistory, { role: "assistant", content: response.message }]);
       if (response.board_update) {
         onBoardUpdate(response.board_update);

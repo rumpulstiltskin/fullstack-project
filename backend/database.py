@@ -1,8 +1,12 @@
+import hashlib
+import hmac
+import os
+import secrets
 import sqlite3
 from pathlib import Path
 from typing import Generator
 
-DB_PATH = Path(__file__).parent / "kanban.db"
+DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent / "kanban.db")))
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -28,6 +32,17 @@ CREATE TABLE IF NOT EXISTS cards (
     details   TEXT NOT NULL DEFAULT '',
     position  INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id),
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chat_history (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_token TEXT NOT NULL,
+    role          TEXT NOT NULL,
+    content       TEXT NOT NULL
+)
 """
 
 _SEED_COLUMNS = [
@@ -49,24 +64,58 @@ _SEED_CARDS = [
     ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally.", 1),
 ]
 
+_HASH_ITERATIONS = 260_000
+_HASH_ALG = "sha256"
 
-def _open(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        _HASH_ALG,
+        password.encode(),
+        salt.encode(),
+        _HASH_ITERATIONS,
+    ).hex()
+    return f"{salt}:{digest}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, digest = stored.split(":", 1)
+    except ValueError:
+        return False
+    expected = hashlib.pbkdf2_hmac(
+        _HASH_ALG,
+        password.encode(),
+        salt.encode(),
+        _HASH_ITERATIONS,
+    ).hex()
+    return hmac.compare_digest(expected, digest)
+
+
+def open_db(path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 def apply_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA)
+    for stmt in _SCHEMA.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
 
 
 def seed(conn: sqlite3.Connection) -> None:
-    if conn.execute("SELECT id FROM users WHERE username = 'user'").fetchone():
+    username = os.environ.get("APP_USERNAME", "user")
+    if conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
         return
+    password = os.environ.get("APP_PASSWORD", "password")
     conn.execute(
         "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
-        ("user-1", "user", "password"),
+        ("user-1", username, hash_password(password)),
     )
     conn.execute(
         "INSERT INTO boards (id, user_id, name) VALUES (?, ?, ?)",
@@ -86,14 +135,14 @@ def seed(conn: sqlite3.Connection) -> None:
 
 
 def init_db() -> None:
-    conn = _open(DB_PATH)
+    conn = open_db(DB_PATH)
     apply_schema(conn)
     seed(conn)
     conn.close()
 
 
 def get_db() -> Generator[sqlite3.Connection, None, None]:
-    conn = _open(DB_PATH)
+    conn = open_db(DB_PATH)
     try:
         yield conn
     finally:

@@ -26,19 +26,24 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const boardRef = useRef<BoardData | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     getBoard()
       .then((data) => {
+        if (!mountedRef.current) return;
         setBoard(data);
         boardRef.current = data;
         setIsLoading(false);
       })
       .catch((err: Error) => {
+        if (!mountedRef.current) return;
         if (err.message === "401") {
           onLogout();
           return;
@@ -47,9 +52,10 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         setIsLoading(false);
       });
     return () => {
+      mountedRef.current = false;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [onLogout]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -60,7 +66,9 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
 
   const save = (newBoard: BoardData) => {
-    putBoard(newBoard).catch(() => {});
+    putBoard(newBoard)
+      .then(() => setSaveError(null))
+      .catch(() => setSaveError("Failed to save board changes."));
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -172,6 +180,14 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
       <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
+        {saveError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            {saveError}
+          </div>
+        )}
         <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
@@ -239,7 +255,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
               <KanbanColumn
                 key={column.id}
                 column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                cards={column.cardIds.flatMap((id) => (board.cards[id] ? [board.cards[id]] : []))}
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}

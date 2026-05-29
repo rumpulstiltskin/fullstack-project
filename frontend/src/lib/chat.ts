@@ -1,4 +1,3 @@
-import { getToken } from "@/lib/auth";
 import type { BoardData } from "@/lib/kanban";
 
 export type ChatMessage = {
@@ -11,19 +10,13 @@ export type AIResponse = {
   board_update: BoardData | null;
 };
 
-export async function sendMessage(
-  history: ChatMessage[],
-  userMessage: string
-): Promise<AIResponse> {
-  const token = getToken();
+export async function sendMessage(userMessage: string): Promise<AIResponse> {
   const res = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ history, user_message: userMessage }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_message: userMessage }),
+    credentials: "include",
   });
   if (!res.ok) throw new Error(`Chat request failed: ${res.status}`);
-  return res.json();
+  return res.json() as Promise<AIResponse>;
 }

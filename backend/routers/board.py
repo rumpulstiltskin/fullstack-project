@@ -1,6 +1,6 @@
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_db
 from models import BoardData, Card, Column
@@ -8,7 +8,6 @@ from routers.auth import get_token
 
 router = APIRouter()
 
-# MVP: single hardcoded user
 _USER_ID = "user-1"
 
 
@@ -69,7 +68,17 @@ def put_board(
     board = db.execute(
         "SELECT id FROM boards WHERE user_id = ?", (_USER_ID,)
     ).fetchone()
+    if not board:
+        raise HTTPException(status_code=404, detail="Board not found")
     board_id = board["id"]
+
+    all_card_ids = {card_id for col in body.columns for card_id in col.cardIds}
+    missing = all_card_ids - set(body.cards.keys())
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"cardIds reference cards not present in cards dict: {sorted(missing)}",
+        )
 
     col_ids = [
         r["id"]
@@ -77,26 +86,27 @@ def put_board(
             "SELECT id FROM columns WHERE board_id = ?", (board_id,)
         ).fetchall()
     ]
-    if col_ids:
-        db.execute(
-            f"DELETE FROM cards WHERE column_id IN ({','.join('?' * len(col_ids))})",
-            col_ids,
-        )
-    db.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
 
-    for pos, col in enumerate(body.columns):
-        db.execute(
-            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
-            (col.id, board_id, col.title, pos),
-        )
-        for card_pos, card_id in enumerate(col.cardIds):
-            card = body.cards.get(card_id)
-            if card:
-                db.execute(
-                    "INSERT INTO cards (id, column_id, title, details, position)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (card.id, col.id, card.title, card.details, card_pos),
-                )
+    with db:
+        if col_ids:
+            db.execute(
+                f"DELETE FROM cards WHERE column_id IN ({','.join('?' * len(col_ids))})",
+                col_ids,
+            )
+        db.execute("DELETE FROM columns WHERE board_id = ?", (board_id,))
 
-    db.commit()
+        for pos, col in enumerate(body.columns):
+            db.execute(
+                "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+                (col.id, board_id, col.title, pos),
+            )
+            for card_pos, card_id in enumerate(col.cardIds):
+                card = body.cards.get(card_id)
+                if card:
+                    db.execute(
+                        "INSERT INTO cards (id, column_id, title, details, position)"
+                        " VALUES (?, ?, ?, ?, ?)",
+                        (card.id, col.id, card.title, card.details, card_pos),
+                    )
+
     return load_board(db)

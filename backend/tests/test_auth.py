@@ -1,52 +1,36 @@
-import pytest
-from fastapi.testclient import TestClient
-
-from main import app
-
-client = TestClient(app)
-
-
-def _login() -> str:
+def test_login_success(client):
     res = client.post("/api/auth/login", json={"username": "user", "password": "password"})
     assert res.status_code == 200
-    return res.json()["token"]
+    assert res.json() == {"ok": True}
+    assert "session" in res.cookies
 
 
-def test_login_success():
-    res = client.post("/api/auth/login", json={"username": "user", "password": "password"})
-    assert res.status_code == 200
-    assert "token" in res.json()
-    assert len(res.json()["token"]) > 0
-
-
-def test_login_wrong_password():
+def test_login_wrong_password(client):
     res = client.post("/api/auth/login", json={"username": "user", "password": "wrong"})
     assert res.status_code == 401
 
 
-def test_login_wrong_username():
+def test_login_wrong_username(client):
     res = client.post("/api/auth/login", json={"username": "admin", "password": "password"})
     assert res.status_code == 401
 
 
-def test_logout_success():
-    token = _login()
-    res = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+def test_logout_success(client, auth_headers):
+    res = client.post("/api/auth/logout")
     assert res.status_code == 200
 
 
-def test_logout_invalidates_token():
-    token = _login()
-    client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
-    res = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+def test_logout_invalidates_session(client, auth_headers):
+    client.post("/api/auth/logout")
+    res = client.post("/api/auth/logout")
     assert res.status_code == 401
 
 
-def test_request_without_token_is_rejected():
+def test_request_without_session_is_rejected(client):
     res = client.post("/api/auth/logout")
-    assert res.status_code == 422  # missing required header
+    assert res.status_code == 401
 
 
-def test_request_with_invalid_token_is_rejected():
-    res = client.post("/api/auth/logout", headers={"Authorization": "Bearer notavalidtoken"})
+def test_request_with_invalid_session_is_rejected(client):
+    res = client.post("/api/auth/logout", cookies={"session": "notavalidtoken"})
     assert res.status_code == 401

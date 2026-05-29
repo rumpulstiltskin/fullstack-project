@@ -1,15 +1,17 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class Card(BaseModel):
-    id: str
-    title: str
-    details: str
+    id: str = Field(max_length=64)
+    title: str = Field(max_length=200)
+    details: str = Field(max_length=2000)
 
 
 class Column(BaseModel):
-    id: str
-    title: str
+    id: str = Field(max_length=64)
+    title: str = Field(max_length=100)
     cardIds: list[str]
 
 
@@ -19,13 +21,12 @@ class BoardData(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
 
 
 class ChatRequest(BaseModel):
-    history: list[ChatMessage]
-    user_message: str
+    user_message: str = Field(max_length=2000)
 
 
 class AIResponse(BaseModel):

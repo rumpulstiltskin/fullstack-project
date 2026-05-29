@@ -3,6 +3,7 @@ import os
 import re
 
 import httpx
+import pydantic
 
 from models import AIResponse, BoardData, ChatMessage
 
@@ -14,14 +15,21 @@ def call_ai(messages: list[dict]) -> str:
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-    response = httpx.post(
-        _URL,
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": _MODEL, "messages": messages},
-        timeout=30.0,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    try:
+        response = httpx.post(
+            _URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": _MODEL, "messages": messages},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    except httpx.TimeoutException as e:
+        raise RuntimeError(f"AI request timed out: {e}")
+    except httpx.HTTPStatusError as e:
+        raise RuntimeError(f"AI API error {e.response.status_code}: {e.response.text}")
+    except httpx.RequestError as e:
+        raise RuntimeError(f"AI request failed: {e}")
 
 
 def _build_system_prompt(board: BoardData) -> str:
@@ -50,6 +58,10 @@ def _extract_json(text: str) -> str:
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
     if match:
         return match.group(1)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
     return text.strip()
 
 
@@ -61,6 +73,8 @@ def call_ai_structured(board: BoardData, messages: list[ChatMessage]) -> AIRespo
     raw = call_ai(all_messages)
     try:
         data = json.loads(_extract_json(raw))
-        return AIResponse(**data)
-    except (json.JSONDecodeError, Exception) as e:
-        raise RuntimeError(f"AI returned invalid response: {e}\n\nRaw: {raw}")
+        return AIResponse.model_validate(data)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"AI returned invalid JSON: {e}\n\nRaw: {raw}")
+    except pydantic.ValidationError as e:
+        raise RuntimeError(f"AI response failed validation: {e}\n\nRaw: {raw}")
